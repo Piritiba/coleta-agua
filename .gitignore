@@ -1,0 +1,5 @@
+*.zip
+backups/
+.firebase/
+node_modules/
+*serviceAccount*.json
