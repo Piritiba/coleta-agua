@@ -107,6 +107,14 @@ table.grid{border-collapse:collapse;min-width:760px;width:100%}
 .gbtn:disabled{opacity:.6}
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.umenu{position:fixed;top:58px;right:12px;z-index:15;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(10,30,35,.18);min-width:230px;max-width:calc(100vw - 24px);overflow:hidden}
+.umenu .who{padding:14px 16px;border-bottom:1px solid var(--line)}
+.umenu .who b{display:block}
+.umenu .who span{display:block;font-size:12px;color:var(--muted);word-break:break-all}
+.umenu button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:13px 16px;text-align:left;cursor:pointer;font-weight:500}
+.umenu button:hover{background:var(--bg)}
+.umenu button.out{color:var(--danger);border-top:1px solid var(--line)}
+.chip-user::after{content:' ▾';font-size:10px;opacity:.8}
 .err{color:var(--danger);font-size:13px;margin:-4px 0 10px;min-height:1em}
 </style>
 </head>
@@ -114,8 +122,9 @@ table.grid{border-collapse:collapse;min-width:760px;width:100%}
 <header class="top">
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.5S5 10.2 5 14.6A7 7 0 0 0 19 14.6C19 10.2 12 2.5 12 2.5Z" fill="#fff" fill-opacity=".9"/><path d="M9 15.5a3 3 0 0 0 3 3" stroke="#0a7570" stroke-width="1.8" stroke-linecap="round"/></svg>
   <h1>Coleta de Água<small>Máquinas de hemodiálise</small></h1>
-  <button class="chip-user" id="userChip" data-act="nav" data-r="equipe" hidden></button>
+  <button class="chip-user" id="userChip" data-act="userMenu" aria-haspopup="menu" aria-expanded="false" hidden></button>
 </header>
+<div class="umenu" id="userMenu" role="menu" hidden></div>
 <div id="banner"></div>
 <main id="view"><div class="spin"></div></main>
 <nav class="bottom" id="nav" hidden><div class="in">
@@ -123,6 +132,7 @@ table.grid{border-collapse:collapse;min-width:760px;width:100%}
   <button data-act="nav" data-r="cronograma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Cronograma</button>
   <button data-act="nav" data-r="hospitais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V7l8-4 8 4v14"/><path d="M12 9v6M9 12h6M4 21h16"/></svg>Hospitais</button>
   <button data-act="nav" data-r="equipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5 6-5s5.4 1.6 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.6.1 4.4 1.6 5 4.3"/></svg>Equipe</button>
+  <button data-act="nav" data-r="admin" id="navAdmin" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.6-3 8.3-7 10-4-1.7-7-5.4-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>Admin</button>
 </div></nav>
 <div class="modal" id="modal"></div>
 <div class="toast" id="toast"></div>
@@ -144,11 +154,12 @@ const firebaseConfig = {
 /* E-mail(s) do administrador — o mesmo colocado nas regras do Firestore */
 const ADMIN_EMAILS = ["gustavo.s.almeida@gmail.com"];
 /* ===================================================================== */
+const APP_VERSION = "1.6";   // versão do app (veja CHANGELOG.md)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, sendEmailVerification, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const MES3=MESES.map(m=>m.slice(0,3));
@@ -160,11 +171,11 @@ const STATUS=[
   {k:'laudo',l:'Laudo anexado',s:'L'}];
 const ST=Object.fromEntries(STATUS.map((s,i)=>[s.k,{...s,i}]));
 const FUNCOES=['Gestão','Controle do sistema','Coleta','Frascos e laudos','Enfermagem (cobrança)','Outro'];
-const ROUTES=['painel','cronograma','hospitais','equipe'];
+const ROUTES=['painel','cronograma','hospitais','equipe','admin','maquinas'];
 const now=new Date(), CUR_M=now.getMonth()+1, CUR_Y=now.getFullYear();
 
-const S={uid:null,email:'',me:undefined,isAdmin:false,authMode:'login',
-  hospitais:[],coletas:[],usuarios:[],fresh:{h:false,c:false,u:false},err:false,
+const S={errCols:[],convChecked:false,convites:[],convUnsub:null,creating:false,uid:null,email:'',me:undefined,isAdmin:false,authMode:'login',
+  hospitais:[],coletas:[],usuarios:[],maquinas:[],maqTipo:'hemodialise',maqHosp:'',fresh:{h:false,c:false,u:false,m:false},err:false,
   route:'painel',mes:CUR_M,ano:CUR_Y,anoCrono:CUR_Y,m:null,unsubs:[],meUnsub:null,phase:'loading'};
 
 const $=s=>document.querySelector(s);
@@ -210,51 +221,80 @@ const AUTH_ERR={
   'auth/operation-not-allowed':'Login por e-mail não foi ativado no Firebase (veja o passo a passo).'};
 const authMsg=e=>AUTH_ERR[e&&e.code]||'Não foi possível concluir. Tente novamente.';
 
-function stopData(){S.unsubs.forEach(u=>u());S.unsubs=[];S.hospitais=[];S.coletas=[];S.usuarios=[];S.fresh={h:false,c:false,u:false}}
+function stopData(){S.unsubs.forEach(u=>u());S.unsubs=[];if(S.convUnsub){S.convUnsub();S.convUnsub=null}S.hospitais=[];S.coletas=[];S.usuarios=[];S.convites=[];S.maquinas=[];S.fresh={h:false,c:false,u:false,m:false}}
+const isOwnerEmail=e=>ADMIN_EMAILS.map(x=>x.toLowerCase()).includes(e);
 
-if(configured)onAuthStateChanged(auth,user=>{
+let curUser=null;
+if(configured)onAuthStateChanged(auth,user=>{curUser=user;startUser(user)});
+function startUser(user){
   stopData();if(S.meUnsub){S.meUnsub();S.meUnsub=null}
-  if(!user){S.uid=null;S.me=undefined;S.phase='auth';closeModal();render();return}
+  if(!user){S.uid=null;S.me=undefined;S.isAdmin=false;S.phase='auth';closeModal();render();return}
   S.uid=user.uid;S.verified=user.emailVerified;S.displayName=user.displayName||'';S.email=(user.email||'').toLowerCase();S.me=undefined;S.phase='loading';render();
+  if(!user.emailVerified){S.phase='verificar';render();return}
+  const owner=isOwnerEmail(S.email);S.convChecked=false;S.errCols=[];S.err=false;
   S.meUnsub=onSnapshot(D('usuarios',S.uid),snap=>{
     S.me=snap.exists()?{id:snap.id,...snap.data()}:null;
-    S.isAdmin=(ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(S.email)&&user.emailVerified)||(S.me&&S.me.aprovado&&S.me.papel==='admin');
-    const ok=S.isAdmin||(S.me&&S.me.aprovado);
-    if(!S.me)S.phase='perfil';
-    else if(!ok)S.phase='aguardando';
-    else{S.phase='app';if(!S.unsubs.length)startData()}
-    if(S.isAdmin&&S.me&&(!S.me.aprovado||S.me.papel!=='admin'))updateDoc(D('usuarios',S.uid),{aprovado:true,papel:'admin'}).catch(()=>{});
-    if(!ok)stopData();
+    if(!S.me){stopData();S.isAdmin=false;primeiroAcesso(owner);return}
+    if(!owner&&!S.convChecked){S.convChecked=true;aplicarConvite()}
+    S.isAdmin=owner||(S.me.aprovado===true&&S.me.papel==='admin');
+    if(!(owner||S.me.aprovado===true)){S.phase='semAcesso';stopData();render();return}
+    S.phase='app';if(!S.unsubs.length)startData();
+    if(S.isAdmin&&!S.convUnsub)S.convUnsub=onSnapshot(collection(fs,'convites'),s=>{S.convites=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));render()},e=>console.error(e));
+    if(!S.isAdmin&&S.convUnsub){S.convUnsub();S.convUnsub=null;S.convites=[]}
+    if(!S.isAdmin&&(S.route==='admin'||S.route==='maquinas'))location.hash='#painel';
     render();
   },e=>{console.error(e);S.err=true;render()});
-});
+}
+async function aplicarConvite(){
+  // Se o administrador cadastrou (ou recadastrou) este e-mail, aplica função, hospital e permissão no usuário que já existe.
+  try{
+    const c=await getDoc(D('convites',S.email));if(!c.exists())return;
+    const v=c.data();
+    await updateDoc(D('usuarios',S.uid),{nome:v.nome||(S.me&&S.me.nome)||'',email:S.email,funcao:v.funcao||'',telefone:v.telefone||'',hospitalId:v.hospitalId||'',aprovado:true,papel:v.papel==='admin'?'admin':'membro',atualizadoEm:iso()});
+    deleteDoc(D('convites',S.email)).catch(()=>{});
+  }catch(e){console.error('convite',e)}
+}
+async function primeiroAcesso(owner){
+  if(S.creating)return;S.creating=true;
+  try{
+    if(owner){await setDoc(D('usuarios',S.uid),{nome:S.displayName||S.email.split('@')[0],email:S.email,funcao:'Gestão',telefone:'',hospitalId:'',aprovado:true,papel:'admin',criadoEm:iso()});return}
+    const c=await getDoc(D('convites',S.email));
+    if(!c.exists()){S.phase='semConvite';render();return}
+    const v=c.data();
+    await setDoc(D('usuarios',S.uid),{nome:v.nome||S.displayName||'',email:S.email,funcao:v.funcao||'',telefone:v.telefone||'',hospitalId:v.hospitalId||'',aprovado:true,papel:v.papel==='admin'?'admin':'membro',criadoEm:iso()});
+    deleteDoc(D('convites',S.email)).catch(()=>{});
+  }catch(e){console.error(e);S.phase='semConvite';render()}
+  finally{S.creating=false}
+}
 
 function startData(){
   const byNome=(a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
   const sub=(col,key,sort)=>onSnapshot(collection(fs,col),s=>{
     S[col]=s.docs.map(d=>({id:d.id,...d.data()})).sort(sort);S.fresh[key]=true;render();
-  },e=>{console.error(e);S.err=true;render()});
-  S.unsubs=[sub('hospitais','h',byNome),sub('usuarios','u',byNome),sub('coletas','c',(a,b)=>(a.ano-b.ano)||(a.mes-b.mes))];
+  },e=>{console.error(col,e);if(!S.errCols.includes(col))S.errCols.push(col);S.fresh[key]=true;S.err=true;render()});
+  S.unsubs=[sub('maquinas','m',(a,b)=>String(a.numeroSerie||'').localeCompare(String(b.numeroSerie||''),'pt-BR')),sub('hospitais','h',byNome),sub('usuarios','u',byNome),sub('coletas','c',(a,b)=>(a.ano-b.ano)||(a.mes-b.mes))];
 }
 
 function readHash(){const h=location.hash.slice(1);S.route=ROUTES.includes(h)?h:'painel'}
-window.addEventListener('hashchange',()=>{readHash();render();scrollTo(0,0)});
+window.addEventListener('hashchange',()=>{closeModal();closeMenu();readHash();render();scrollTo(0,0)});
 readHash();
 
 /* ---------- telas ---------- */
 function render(){
   const v=$('#view'),nav=$('#nav'),chip=$('#userChip'),ban=$('#banner');
-  ban.innerHTML=S.err?'<div class="banner err">Erro ao carregar os dados. Verifique a conexão e as regras do Firestore.</div>':'';
-  nav.hidden=true;chip.hidden=true;
+  ban.innerHTML=S.err?`<div class="banner err">Erro ao carregar os dados${S.errCols.length?' ('+S.errCols.map(c=>({hospitais:'hospitais',coletas:'coletas',usuarios:'usuários',maquinas:'máquinas'})[c]||c).join(', ')+')':''}. O Firebase recusou a leitura: confira se as regras da versão ${APP_VERSION} foram publicadas (Firestore → Regras → Publicar) e entre de novo.</div>`:'';
+  nav.hidden=true;chip.hidden=true;if(S.phase!=='app')closeMenu();
   if(!configured){v.innerHTML=`<div class="hero"><h2>Falta configurar o Firebase</h2><p>Abra o arquivo <b>index.html</b>, cole os dados do seu projeto Firebase em <code>firebaseConfig</code> e seu e-mail em <code>ADMIN_EMAILS</code>. Veja o arquivo PASSO-A-PASSO.</p></div>`;return}
   if(S.phase==='loading'){v.innerHTML='<div class="spin"></div><p class="note" style="text-align:center">Carregando…</p>';return}
   if(S.phase==='auth'){v.innerHTML=authView();return}
-  if(S.phase==='perfil'){v.innerHTML=perfilView();return}
-  if(S.phase==='aguardando'){v.innerHTML=aguardandoView();return}
+  if(S.phase==='verificar'){v.innerHTML=verificarView();return}
+  if(S.phase==='semConvite'||S.phase==='semAcesso'){v.innerHTML=semAcessoView();return}
+  if((S.route==='admin'||S.route==='maquinas')&&!S.isAdmin)S.route='painel';
   nav.hidden=false;chip.hidden=false;chip.textContent=(S.me&&S.me.nome)||S.email;
-  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.r===S.route));
-  if(!(S.fresh.h&&S.fresh.c&&S.fresh.u)&&!S.err){v.innerHTML='<div class="spin"></div>';return}
-  v.innerHTML=({painel:painelView,cronograma:cronoView,hospitais:hospView,equipe:equipeView})[S.route]();
+  $('#navAdmin').hidden=!S.isAdmin;
+  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.r===(S.route==='maquinas'?'admin':S.route)));
+  if(!(S.fresh.h&&S.fresh.c&&S.fresh.u&&S.fresh.m)&&!S.err){v.innerHTML='<div class="spin"></div>';return}
+  v.innerHTML=({painel:painelView,cronograma:cronoView,hospitais:hospView,equipe:equipeView,admin:adminView,maquinas:maquinasView})[S.route]();
 }
 
 function authView(){
@@ -266,35 +306,30 @@ function authView(){
   return `<div class="hero">
     <button type="button" class="gbtn" data-act="google"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Entrar com Google</button>
     <div class="or">ou com e-mail e senha</div>
-    <div class="auth-tabs"><button class="${m==='login'?'on':''}" data-act="authMode" data-m="login">Entrar</button><button class="${m==='cadastro'?'on':''}" data-act="authMode" data-m="cadastro">Criar cadastro</button></div>
+    <div class="auth-tabs"><button class="${m==='login'?'on':''}" data-act="authMode" data-m="login">Entrar</button><button class="${m==='cadastro'?'on':''}" data-act="authMode" data-m="cadastro">Primeiro acesso</button></div>
     ${m==='login'?`<form data-form="login">
       <label class="field"><span>E-mail pessoal</span><input name="email" type="email" required autocomplete="email" placeholder="seunome@gmail.com"></label>
       <label class="field"><span>Senha</span><input name="senha" type="password" required autocomplete="current-password"></label>
       <div class="err" id="authErr"></div><button class="btn" style="width:100%">Entrar</button></form>
       <button class="linkbtn" data-act="authMode" data-m="reset">Esqueci minha senha</button>`
     :`<form data-form="cadastro">
-      <label class="field"><span>Nome</span><input name="nome" required placeholder="Seu nome"></label>
+      <p class="note" style="margin-top:0">Use o e-mail que o administrador cadastrou para você e crie uma senha.</p>
       <label class="field"><span>E-mail pessoal (Gmail, Hotmail, Outlook…)</span><input name="email" type="email" required autocomplete="email" placeholder="seunome@gmail.com"></label>
       <label class="field"><span>Senha (mínimo 6 caracteres)</span><input name="senha" type="password" minlength="6" required autocomplete="new-password"></label>
-      <label class="field"><span>Função</span><select name="funcao">${FUNCOES.map(f=>`<option>${f}</option>`).join('')}</select></label>
-      <label class="field"><span>Telefone / WhatsApp</span><input name="telefone" inputmode="tel" placeholder="(71) 9 0000-0000"></label>
-      <div class="err" id="authErr"></div><button class="btn" style="width:100%">Criar cadastro</button>
-      <p class="note">Depois do cadastro, o administrador precisa aprovar seu acesso.</p></form>`}
+      <div class="err" id="authErr"></div><button class="btn" style="width:100%">Criar senha</button></form>`}
+    <p class="note" style="text-align:center;margin-top:14px">Só e-mails cadastrados pelo administrador têm acesso.</p>
+    <p class="note" style="text-align:center;margin-top:4px">Versão ${APP_VERSION}</p>
   </div>`;
 }
-function perfilView(){
-  return `<div class="hero"><h2>Complete seu cadastro</h2><p>Entrou como <b>${esc(S.email)}</b>.</p>
-  <form data-form="perfil">
-    <label class="field"><span>Nome</span><input name="nome" required value="${esc(S.displayName)}"></label>
-    <label class="field"><span>Função</span><select name="funcao">${FUNCOES.map(f=>`<option>${f}</option>`).join('')}</select></label>
-    <label class="field"><span>Telefone / WhatsApp</span><input name="telefone" inputmode="tel"></label>
-    <div class="foot"><button type="button" class="btn ghost left" data-act="sair">Sair</button><button class="btn">Salvar</button></div></form></div>`;
+function verificarView(){
+  return `<div class="hero"><h2>Confirme seu e-mail</h2>
+  <p>Enviamos um link de confirmação para <b>${esc(S.email)}</b>. Abra o e-mail (confira também o spam), toque no link e depois volte aqui.</p>
+  <div class="row"><button class="btn" data-act="verifOk">Já confirmei</button><button class="btn sec" data-act="reenviar">Reenviar e-mail</button><button class="btn ghost" data-act="sair">Sair</button></div></div>`;
 }
-function aguardandoView(){
-  return `<div class="hero"><h2>Aguardando aprovação</h2>
-  <p>Olá, ${esc(S.me&&S.me.nome)}! Seu cadastro (${esc(S.email)}) foi recebido. Assim que o administrador aprovar, o app abre automaticamente.</p>
-  ${ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(S.email)&&!S.verified?'<p class="banner" style="margin:0 0 12px">Você é o administrador: confirme seu e-mail pelo link que enviamos (veja também o spam), depois toque em Sair e entre de novo.</p><button class="btn sec" data-act="reenviar">Reenviar e-mail de confirmação</button> ':''}
-  <button class="btn ghost" data-act="sair">Sair</button></div>`;
+function semAcessoView(){
+  return `<div class="hero"><h2>Acesso não liberado</h2>
+  <p>O e-mail <b>${esc(S.email)}</b> não está cadastrado neste aplicativo. Peça ao administrador para cadastrar você e depois entre de novo.</p>
+  <div class="row"><button class="btn sec" data-act="tentar">Tentar de novo</button><button class="btn ghost" data-act="sair">Sair</button></div></div>`;
 }
 
 function coletaCard(c){
@@ -328,51 +363,73 @@ function painelView(){
     ${late.length?`<h3>Atrasadas de meses anteriores (${late.length})</h3><div class="cards">${late.map(coletaCard).join('')}</div>`:''}
     <h3>Coletas de ${MESES[S.mes-1]}</h3>
     ${list.length?`<div class="cards">${list.map(coletaCard).join('')}</div>`
-      :`<div class="empty">Nenhuma coleta prevista para este mês.<br><br><button class="btn sec" data-act="nav" data-r="cronograma">Abrir cronograma</button></div>`}`;
+      :`<div class="empty">Nenhuma coleta prevista para este mês.${S.isAdmin?'<br><br><button class="btn sec" data-act="nav" data-r="cronograma">Abrir cronograma</button>':''}</div>`}`;
 }
 function cronoView(){
   const y=S.anoCrono;const map={};S.coletas.filter(c=>c.ano===y).forEach(c=>map[c.hospitalId+'_'+c.mes]=c);
   const rows=S.hospitais.map(h=>`<tr><td class="h" title="${esc(h.nome)}">${esc(h.sigla||h.nome)}</td>${MES3.map((_,i)=>{
     const c=map[h.id+'_'+(i+1)];
     if(c){const s=ST[c.status]||ST.pendente;return `<td><button class="cell s-${s.k} ${isLate(c)?'late':''}" title="${esc(s.l)}" data-act="coleta" data-id="${esc(c.id)}">${s.s}</button></td>`}
-    return `<td><button class="cell none" aria-label="Adicionar" data-act="novaColeta" data-h="${esc(h.id)}" data-m="${i+1}">+</button></td>`;
+    return `<td>${S.isAdmin?`<button class="cell none" aria-label="Adicionar" data-act="novaColeta" data-h="${esc(h.id)}" data-m="${i+1}">+</button>`:''}</td>`;
   }).join('')}</tr>`).join('');
   return `<div class="spread"><h2>Cronograma</h2>
     <div class="row"><div class="stepper"><button data-act="ano" data-d="-1" aria-label="Ano anterior">‹</button><span style="min-width:60px">${y}</span><button data-act="ano" data-d="1" aria-label="Próximo ano">›</button></div>
-    <button class="btn" data-act="gerar">+ Gerar cronograma</button></div></div>
+    ${S.isAdmin?'<button class="btn" data-act="gerar">+ Gerar cronograma</button>':''}</div></div>
     ${S.hospitais.length?`<div class="tablewrap"><table class="grid"><thead><tr><th class="h">Hospital</th>${MES3.map((m,i)=>`<th class="${y===CUR_Y&&i+1===CUR_M?'cur':''}">${m}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
     <div class="legend">${STATUS.map(s=>`<span class="pill s-${s.k}">${s.s} · ${s.l}</span>`).join('')}<span class="pill s-late">Contorno vermelho = atrasada</span></div>
-    <p class="note">Toque em “+” para incluir uma coleta num mês, ou em uma letra para ver e editar.</p>`
-    :`<div class="empty">Cadastre os hospitais primeiro para montar o cronograma.<br><br><button class="btn sec" data-act="nav" data-r="hospitais">Ir para Hospitais</button></div>`}`;
+    <p class="note">${S.isAdmin?'Toque em “+” para incluir uma coleta num mês, ou em uma letra para ver e editar.':'Toque em uma letra para ver a coleta e atualizar o status.'}</p>`
+    :`<div class="empty">Nenhum hospital cadastrado ainda.${S.isAdmin?'<br><br><button class="btn sec" data-act="hospital">+ Novo hospital</button>':' O administrador fará o cadastro.'}</div>`}`;
 }
 function hospView(){
-  return `<div class="spread"><h2>Hospitais</h2><button class="btn" data-act="hospital">+ Novo hospital</button></div>
+  return `<div class="spread"><h2>Hospitais</h2>${S.isAdmin?'<button class="btn" data-act="hospital">+ Novo hospital</button>':''}</div>
   ${S.hospitais.length?`<div class="cards">${S.hospitais.map(h=>{const n=S.coletas.filter(c=>c.hospitalId===h.id&&c.ano===CUR_Y).length;
-    return `<div class="card click" data-act="hospital" data-id="${esc(h.id)}">
-      <div class="spread"><div class="t">${esc(hname(h))}</div>${h.maquinas?`<span class="tag">${esc(h.maquinas)} máquina${h.maquinas==1?'':'s'}</span>`:''}</div>
+    return `<div class="card click" data-act="hospDet" data-id="${esc(h.id)}">
+      <div class="spread"><div class="t">${esc(hname(h))}</div>${maqTags(h)}</div>
       <div class="m">Cobrança: <b>${esc(uname(h.enfermeiraId)||h.contato||'a definir')}</b> · ${n} coleta${n===1?'':'s'} em ${CUR_Y}</div>
       ${h.pontos?`<div class="m">Pontos: ${esc(h.pontos)}</div>`:''}</div>`}).join('')}</div>`
   :'<div class="empty">Nenhum hospital cadastrado ainda.</div>'}`;
 }
-function equipeView(){
-  const me=S.me||{};const outros=S.usuarios.filter(u=>u.id!==S.uid);const pend=outros.filter(u=>!u.aprovado);const ativos=outros.filter(u=>u.aprovado);
-  const card=u=>{const h=hosp(u.hospitalId);return `<div class="card">
+function userCard(u,actions){const h=hosp(u.hospitalId);return `<div class="card">
     <div class="spread"><div class="t">${esc(u.nome)}</div>${u.papel==='admin'?'<span class="tag ok">Administrador</span>':''}</div>
     <div class="m">${esc(u.funcao||'')}${h?' · '+esc(hname(h)):''}</div>
-    <div class="m">${[u.email,u.telefone].filter(Boolean).map(esc).join(' · ')}</div>
-    ${S.isAdmin&&u.id!==S.uid?`<div class="acts">
-      ${u.aprovado?'':`<button class="btn sm" data-act="aprovar" data-id="${esc(u.id)}">Aprovar</button>`}
-      ${u.aprovado?`<button class="btn sm sec" data-act="papel" data-id="${esc(u.id)}">${u.papel==='admin'?'Remover admin':'Tornar admin'}</button>`:''}
-      <button class="btn sm danger" data-act="remover" data-id="${esc(u.id)}">${u.aprovado?'Remover acesso':'Recusar'}</button></div>`:''}
-  </div>`};
+    <div class="m">${[u.email,u.telefone].filter(Boolean).map(esc).join(' · ')}</div>${actions||''}</div>`}
+function equipeView(){
+  const me=S.me||{};const ativos=S.usuarios.filter(u=>u.id!==S.uid&&u.aprovado);
   return `<h2>Equipe</h2>
   <div class="card"><div class="spread"><div><div class="t">${esc(me.nome||'')} <span class="tag">você</span>${S.isAdmin?' <span class="tag ok">Administrador</span>':''}</div>
     <div class="m">${esc(S.email)}${me.funcao?' · '+esc(me.funcao):''}</div></div>
-    <div class="row"><button class="btn sm sec" data-act="meuPerfil">Editar</button><button class="btn sm ghost" data-act="sair">Sair</button></div></div></div>
-  ${S.isAdmin&&pend.length?`<h3>Aguardando aprovação (${pend.length})</h3><div class="cards">${pend.map(card).join('')}</div>`:''}
+    <div class="row">${S.isAdmin?'<button class="btn sm sec" data-act="meuPerfil">Editar</button>':''}<button class="btn sm ghost" data-act="sair">Sair</button></div></div></div>
   <h3>Equipe ativa (${ativos.length+1})</h3>
-  ${ativos.length?`<div class="cards">${ativos.map(card).join('')}</div>`:'<div class="empty">Ninguém aprovado ainda.</div>'}
-  <p class="note">Para alguém novo usar o app, envie o link. A pessoa cria o cadastro com o e-mail pessoal e senha, e aparece aqui para você aprovar.</p>`;
+  ${ativos.length?`<div class="cards">${ativos.map(u=>userCard(u)).join('')}</div>`:'<div class="empty">Ainda não há outras pessoas na equipe.</div>'}
+  ${S.isAdmin?'<p class="note">Para cadastrar ou remover usuários, use a aba <b>Admin</b>.</p>':'<p class="note">Para corrigir seus dados (nome, telefone, função ou hospital), fale com um administrador.</p>'}
+  <p class="note" style="text-align:center;margin-top:24px">Coleta de Água · versão ${APP_VERSION}</p>`;
+}
+function adminView(){
+  const ativos=S.usuarios.filter(u=>u.id!==S.uid&&u.aprovado);
+  return `<h2>Administração</h2>
+  <div class="stats" style="margin-top:0">
+    <button class="btn" data-act="convite">+ Cadastrar usuário</button>
+    <button class="btn" data-act="hospital">+ Novo hospital</button>
+    <button class="btn" data-act="gerar" ${S.hospitais.length?'':'disabled'}>+ Gerar cronograma</button>
+    <button class="btn" data-act="nav" data-r="maquinas">⚙️ Cadastro de máquinas</button>
+  </div>
+  <h3>Usuários cadastrados — aguardando primeiro acesso (${S.convites.length})</h3>
+  ${S.convites.length?`<div class="cards">${S.convites.map(c=>userCard({...c,email:c.id},`<div class="acts"><span class="tag">Ainda não entrou</span>
+      <button class="btn sm sec" data-act="convite" data-id="${esc(c.id)}">Editar</button>
+      <button class="btn sm danger" data-act="cancelarConvite" data-id="${esc(c.id)}">Cancelar</button></div>`)).join('')}</div>`
+    :'<div class="empty">Nenhum cadastro pendente.</div>'}
+  <h3>Usuários ativos (${ativos.length})</h3>
+  ${ativos.length?`<div class="cards">${ativos.map(u=>userCard(u,`<div class="acts">
+      <button class="btn sm sec" data-act="editUsuario" data-id="${esc(u.id)}">Editar</button>
+      <button class="btn sm sec" data-act="papel" data-id="${esc(u.id)}">${u.papel==='admin'?'Remover admin':'Tornar admin'}</button>
+      <button class="btn sm danger" data-act="remover" data-id="${esc(u.id)}">Remover acesso</button></div>`)).join('')}</div>`
+    :'<div class="empty">Nenhum outro usuário ativo ainda.</div>'}
+  <h3>Máquinas (${S.maquinas.length})</h3>
+  <div class="card click" data-act="nav" data-r="maquinas"><div class="spread"><div><div class="t">Cadastro de máquinas</div>
+    <div class="m">${maqCount('hemodialise')} de hemodiálise · ${maqCount('osmose')} de osmose</div></div><span class="tag">Abrir</span></div></div>
+  <h3>Hospitais (${S.hospitais.length})</h3>
+  ${S.hospitais.length?`<div class="cards">${S.hospitais.map(h=>`<div class="card click" data-act="hospital" data-id="${esc(h.id)}"><div class="spread"><div class="t">${esc(hname(h))}</div><span class="tag">Editar</span></div></div>`).join('')}</div>`:'<div class="empty">Nenhum hospital cadastrado.</div>'}
+  <p class="note">Como funciona: cadastre o e-mail pessoal da pessoa aqui e envie o link do app. Ela entra com o Google ou cria uma senha em “Primeiro acesso”, usando esse mesmo e-mail.</p>`;
 }
 
 /* ---------- janelas ---------- */
@@ -401,8 +458,25 @@ function coletaModal(id,hospitalId,mes,ano){
     ${url?`<p style="margin:-6px 0 12px"><a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--brand);font-weight:600">📄 Abrir laudo</a></p>`:''}
     <label class="field"><span>Observações</span><textarea name="obs">${esc(d.obs)}</textarea></label>
     ${c&&c.atualizadoEm?`<p class="note">Atualizado em ${new Date(c.atualizadoEm).toLocaleString('pt-BR')}${uname(c.atualizadoPor)?' por '+esc(uname(c.atualizadoPor)):''}</p>`:''}
-    <div class="foot">${c?`<button type="button" class="btn danger left" data-act="delColeta">Excluir</button>`:''}
+    <div class="foot">${c&&S.isAdmin?`<button type="button" class="btn danger left" data-act="delColeta">Excluir</button>`:''}
       <button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+function hospDetalheModal(id){
+  const h=hosp(id);if(!h)return;S.m={type:'hospDet',id};
+  const maqs=t=>S.maquinas.filter(m=>m.hospitalId===id&&m.tipo===t);
+  const lista=t=>{const l=maqs(t);return l.length?l.map(m=>`<div class="card" style="padding:10px 12px;margin-bottom:6px"><b>${esc(m.marca||'Sem marca')}</b>
+      <div class="m" style="margin-top:2px">Nº de série: <b>${esc(m.numeroSerie||'—')}</b>${m.anoCompra?' · Comprada em '+esc(m.anoCompra):''}</div>${m.obs?`<div class="m">${esc(m.obs)}</div>`:''}</div>`).join('')
+    :'<p class="note" style="margin:0 0 6px">Nenhuma cadastrada.</p>'};
+  const equipe=S.usuarios.filter(u=>u.hospitalId===id&&u.aprovado);
+  openModal(`<h2>${esc(hname(h))}</h2>
+    <div class="m">Cobrança: <b>${esc(uname(h.enfermeiraId)||h.contato||'a definir')}</b></div>
+    ${h.pontos?`<div class="m">Pontos de coleta: ${esc(h.pontos)}</div>`:''}
+    ${h.obs?`<div class="m">${esc(h.obs)}</div>`:''}
+    ${equipe.length?`<div class="m">Equipe do hospital: ${equipe.map(u=>esc(u.nome)+(u.funcao?' ('+esc(u.funcao)+')':'')).join(', ')}</div>`:''}
+    <h3>Máquinas de hemodiálise (${maqs('hemodialise').length})</h3>${lista('hemodialise')}
+    <h3>Máquinas de osmose (${maqs('osmose').length})</h3>${lista('osmose')}
+    <div class="foot" style="margin-top:14px">${S.isAdmin?`<button type="button" class="btn sec left" data-act="hospital" data-id="${esc(id)}">Editar hospital</button><button type="button" class="btn sec" data-act="nav" data-r="maquinas">Gerenciar máquinas</button>`:''}
+      <button type="button" class="btn ghost" data-act="close">Fechar</button></div>`);
 }
 function hospitalModal(id){
   const h=id?hosp(id):{};S.m={type:'hospital',id:id||null,confirm:false};
@@ -436,12 +510,83 @@ function perfilModal(){
     <div class="foot"><button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
 }
 
+function pessoaFields(u){
+  return `<label class="field"><span>Nome</span><input name="nome" required value="${esc(u.nome)}"></label>
+    <label class="field"><span>Função</span><select name="funcao">${FUNCOES.map(f=>`<option ${u.funcao===f?'selected':''}>${f}</option>`).join('')}</select></label>
+    <label class="field"><span>Telefone / WhatsApp</span><input name="telefone" inputmode="tel" value="${esc(u.telefone)}"></label>
+    <label class="field"><span>Hospital (se for de um hospital específico)</span><select name="hospitalId"><option value="">—</option>${S.hospitais.map(h=>`<option value="${esc(h.id)}" ${u.hospitalId===h.id?'selected':''}>${esc(hname(h))}</option>`).join('')}</select></label>
+    <label class="field"><span>Permissão</span><select name="papel"><option value="membro">Usuário (atualiza coletas)</option><option value="admin" ${u.papel==='admin'?'selected':''}>Administrador (cadastra tudo)</option></select></label>`;
+}
+function conviteModal(id){
+  const c=id?S.convites.find(x=>x.id===id)||{}:{};S.m={type:'convite',id:id||null};
+  openModal(`<h2>${id?'Editar cadastro':'Cadastrar usuário'}</h2><form data-form="convite">
+    ${id?`<div class="field"><span>E-mail</span><div class="fixed">${esc(id)}</div><input type="hidden" name="email" value="${esc(id)}"></div>`
+      :`<label class="field"><span>E-mail pessoal (Gmail, Hotmail, Outlook…)</span><input name="email" type="email" required placeholder="nome@gmail.com"></label>`}
+    ${pessoaFields(c)}
+    <p class="note">A pessoa entra com este e-mail (pelo Google ou criando uma senha em “Primeiro acesso”).</p>
+    <div class="foot"><button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+function usuarioAdmModal(id){
+  const u=usr(id)||{};S.m={type:'usuarioAdm',id};
+  openModal(`<h2>Editar usuário</h2><form data-form="usuarioAdm">
+    <div class="field"><span>E-mail</span><div class="fixed">${esc(u.email)}</div></div>
+    ${pessoaFields(u)}
+    <div class="foot"><button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+
+const TIPOS={hemodialise:'Hemodiálise',osmose:'Osmose'};
+const maqCount=(t,hid)=>S.maquinas.filter(m=>m.tipo===t&&(hid===undefined||m.hospitalId===hid)).length;
+function maqTags(h){
+  const hd=maqCount('hemodialise',h.id),os=maqCount('osmose',h.id);
+  if(!hd&&!os)return h.maquinas?`<span class="tag">${esc(h.maquinas)} máquina${h.maquinas==1?'':'s'}</span>`:'';
+  return `<span class="row" style="gap:4px">${hd?`<span class="tag">${hd} hemodiálise</span>`:''}${os?`<span class="tag">${os} osmose</span>`:''}</span>`;
+}
+function maquinasView(){
+  const t=S.maqTipo;const hf=S.maqHosp;
+  const list=S.maquinas.filter(m=>m.tipo===t&&(!hf||m.hospitalId===hf));
+  const grupos={};list.forEach(m=>{(grupos[m.hospitalId||'']=grupos[m.hospitalId||'']||[]).push(m)});
+  const ordem=Object.keys(grupos).sort((a,b)=>hname(hosp(a)).localeCompare(hname(hosp(b)),'pt-BR'));
+  const card=m=>`<div class="card click" data-act="maquina" data-id="${esc(m.id)}">
+      <div class="spread"><div class="t">${esc(m.marca||'Sem marca')}</div><span class="tag">${esc(TIPOS[m.tipo])}</span></div>
+      <div class="m">Nº de série: <b>${esc(m.numeroSerie||'—')}</b>${m.anoCompra?` · Comprada em ${esc(m.anoCompra)}`:''}</div>
+      ${m.obs?`<div class="m">${esc(m.obs)}</div>`:''}</div>`;
+  return `<button class="linkbtn" data-act="nav" data-r="admin">← Administração</button>
+  <div class="spread"><h2>Cadastro de máquinas</h2><button class="btn" data-act="maquina">+ Nova máquina de ${TIPOS[t].toLowerCase()}</button></div>
+  <div class="auth-tabs" style="max-width:420px"><button class="${t==='hemodialise'?'on':''}" data-act="maqTipo" data-t="hemodialise">Hemodiálise (${maqCount('hemodialise')})</button><button class="${t==='osmose'?'on':''}" data-act="maqTipo" data-t="osmose">Osmose (${maqCount('osmose')})</button></div>
+  <label class="field" style="max-width:420px"><span>Filtrar por hospital</span><select id="maqHosp"><option value="">Todos os hospitais</option>${S.hospitais.map(h=>`<option value="${esc(h.id)}" ${hf===h.id?'selected':''}>${esc(hname(h))} (${maqCount(t,h.id)})</option>`).join('')}</select></label>
+  ${list.length?ordem.map(hid=>`<h3>${esc(hid?hname(hosp(hid)):'Sem hospital definido')} (${grupos[hid].length})</h3><div class="cards">${grupos[hid].map(card).join('')}</div>`).join('')
+    :`<div class="empty">Nenhuma máquina de ${TIPOS[t].toLowerCase()} cadastrada${hf?' neste hospital':''}.</div>`}`;
+}
+function maquinaModal(id){
+  const m=id?S.maquinas.find(x=>x.id===id)||{}:{tipo:S.maqTipo,hospitalId:S.maqHosp};S.m={type:'maquina',id:id||null,confirm:false};
+  if(!S.hospitais.length){toast('Cadastre um hospital antes das máquinas.');return}
+  openModal(`<h2>${id?'Máquina':'Nova máquina'}</h2><form data-form="maquina">
+    <label class="field"><span>Tipo</span><select name="tipo"><option value="hemodialise" ${m.tipo!=='osmose'?'selected':''}>Hemodiálise</option><option value="osmose" ${m.tipo==='osmose'?'selected':''}>Osmose</option></select></label>
+    <label class="field"><span>Marca</span><input name="marca" required value="${esc(m.marca)}" placeholder="Ex.: Fresenius, B. Braun, Nipro"></label>
+    <div class="two"><label class="field"><span>Código de série</span><input name="numeroSerie" required value="${esc(m.numeroSerie)}"></label>
+    <label class="field"><span>Ano de compra</span><input name="anoCompra" type="number" min="1980" max="2100" value="${esc(m.anoCompra)}" placeholder="${CUR_Y}"></label></div>
+    <label class="field"><span>Hospital onde está</span><select name="hospitalId" required><option value="">— escolha —</option>${S.hospitais.map(h=>`<option value="${esc(h.id)}" ${m.hospitalId===h.id?'selected':''}>${esc(hname(h))}</option>`).join('')}</select></label>
+    <label class="field"><span>Observações</span><textarea name="obs" placeholder="Opcional">${esc(m.obs)}</textarea></label>
+    <div class="foot">${id?`<button type="button" class="btn danger left" data-act="delMaquina">Excluir</button>`:''}
+      <button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+document.addEventListener('change',e=>{if(e.target.id==='maqHosp'){S.maqHosp=e.target.value;render()}});
+
 /* ---------- ações ---------- */
 const ACT={
   nav:d=>{closeModal();location.hash='#'+d.r},
   close:()=>closeModal(),
   authMode:d=>{S.authMode=d.m;render()},
-  sair:()=>{closeModal();signOut(auth)},
+  sair:()=>{closeMenu();closeModal();signOut(auth)},
+  userMenu:()=>{const m=$('#userMenu');if(!m.hidden){closeMenu();return}
+    const me=S.me||{};
+    m.innerHTML=`<div class="who"><b>${esc(me.nome||'')}</b><span>${esc(S.email)}</span>${S.isAdmin?'<span class="tag ok" style="margin-top:6px;display:inline-block">Administrador</span>':''}</div>
+      ${S.isAdmin?'<button data-act="menuPerfil" role="menuitem">✏️ Meu cadastro</button>':''}
+      <button data-act="menuEquipe" role="menuitem">👥 Equipe</button>
+      <button class="out" data-act="sair" role="menuitem">⎋ Sair do sistema</button>`;
+    m.hidden=false;$('#userChip').setAttribute('aria-expanded','true')},
+  menuPerfil:()=>{closeMenu();if(S.isAdmin)perfilModal()},
+  menuEquipe:()=>{closeMenu();location.hash='#equipe'},
   google:async(d,btn)=>{
     const prov=new GoogleAuthProvider();prov.setCustomParameters({prompt:'select_account'});
     btn.disabled=true;const er=$('#authErr');if(er)er.textContent='';
@@ -457,10 +602,21 @@ const ACT={
   coleta:d=>coletaModal(d.id),
   novaColeta:d=>coletaModal(null,d.h,Number(d.m),S.anoCrono),
   hospital:d=>hospitalModal(d.id),
+  hospDet:d=>hospDetalheModal(d.id),
   gerar:()=>gerarModal(),
-  meuPerfil:()=>perfilModal(),
+  meuPerfil:()=>{if(S.isAdmin)perfilModal()},
   todosMeses:()=>document.querySelectorAll('.months input').forEach(i=>i.checked=true),
-  aprovar:async d=>{if(await w(()=>updateDoc(D('usuarios',d.id),{aprovado:true,aprovadoEm:iso()})))toast('Acesso aprovado.')},
+  convite:d=>conviteModal(d.id),
+  maqTipo:d=>{S.maqTipo=d.t;render()},
+  maquina:d=>maquinaModal(d.id),
+  delMaquina:async(d,btn)=>{if(!S.m.confirm){S.m.confirm=true;btn.textContent='Confirmar exclusão';return}
+    btn.disabled=true;if(await w(()=>deleteDoc(D('maquinas',S.m.id)))){closeModal();toast('Máquina excluída.')}else btn.disabled=false},
+  editUsuario:d=>usuarioAdmModal(d.id),
+  cancelarConvite:async(d,btn)=>{if(btn.dataset.ok!=='1'){btn.dataset.ok='1';btn.textContent='Confirmar';return}
+    if(await w(()=>deleteDoc(D('convites',d.id))))toast('Cadastro cancelado.')},
+  verifOk:async(d,btn)=>{btn.disabled=true;try{await curUser.reload();await curUser.getIdToken(true)}catch(x){}
+    if(curUser&&curUser.emailVerified)startUser(curUser);else{toast('Ainda não confirmado. Abra o link do e-mail e tente de novo.');btn.disabled=false}},
+  tentar:()=>{if(curUser)startUser(curUser)},
   papel:async d=>{const u=usr(d.id);if(u&&await w(()=>updateDoc(D('usuarios',d.id),{papel:u.papel==='admin'?'membro':'admin'})))toast('Permissão atualizada.')},
   remover:async(d,btn)=>{if(btn.dataset.ok!=='1'){btn.dataset.ok='1';btn.textContent='Confirmar';return}
     if(await w(()=>deleteDoc(D('usuarios',d.id))))toast('Acesso removido.')},
@@ -476,6 +632,9 @@ const ACT={
     btn.disabled=true;for(const c of cs){if(!await w(()=>deleteDoc(D('coletas',c.id)))){btn.disabled=false;return}}
     if(await w(()=>deleteDoc(D('hospitais',hid)))){closeModal();toast('Hospital excluído.')}else btn.disabled=false}
 };
+function closeMenu(){const m=$('#userMenu');if(m){m.hidden=true;m.innerHTML=''}const c=$('#userChip');if(c)c.setAttribute('aria-expanded','false')}
+document.addEventListener('click',e=>{if(!e.target.closest('#userMenu')&&!e.target.closest('#userChip'))closeMenu()},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const f=ACT[t.dataset.act];if(f){e.preventDefault();f(t.dataset,t,e)}});
 
 document.addEventListener('submit',async e=>{
@@ -493,12 +652,30 @@ document.addEventListener('submit',async e=>{
   if(kind==='cadastro'){
     try{
       const cred=await createUserWithEmailAndPassword(auth,val('email'),String(f.get('senha')));
-      await setDoc(D('usuarios',cred.user.uid),{nome:val('nome'),email:val('email').toLowerCase(),funcao:val('funcao'),telefone:val('telefone'),hospitalId:'',aprovado:false,papel:'membro',criadoEm:iso()});
       sendEmailVerification(cred.user).catch(()=>{});ok=true;
     }catch(x){setErr(authMsg(x))}
   }
-  if(kind==='perfil'){
-    ok=await w(()=>setDoc(D('usuarios',S.uid),{nome:val('nome'),email:S.email,funcao:val('funcao'),telefone:val('telefone'),hospitalId:'',aprovado:false,papel:'membro',criadoEm:iso()}));
+  if(kind==='convite'){
+    const email=val('email').toLowerCase();const editing=S.m&&S.m.id;
+    if(!editing&&S.usuarios.some(u=>(u.email||'').toLowerCase()===email))toast('Este e-mail já é de um usuário ativo. Use Editar em Usuários ativos para mudar função ou hospital.');
+    else if(!editing&&S.convites.some(c=>c.id===email))toast('Este e-mail já está cadastrado (aguardando primeiro acesso).');
+    else{
+      ok=await w(()=>setDoc(D('convites',email),{nome:val('nome'),funcao:val('funcao'),telefone:val('telefone'),hospitalId:val('hospitalId'),papel:val('papel')==='admin'?'admin':'membro',criadoPor:S.uid,criadoEm:iso()}));
+      if(ok){closeModal();toast(editing?'Cadastro atualizado.':'Usuário cadastrado. Envie o link do app para a pessoa.')}
+    }
+  }
+  if(kind==='maquina'){
+    const id=S.m.id||doc(collection(fs,'maquinas')).id;const old=S.maquinas.find(x=>x.id===id)||{};
+    const serie=val('numeroSerie');
+    if(S.maquinas.some(x=>x.id!==id&&String(x.numeroSerie||'').trim().toLowerCase()===serie.toLowerCase()))toast('Já existe uma máquina com esse código de série.');
+    else{
+      ok=await w(()=>setDoc(D('maquinas',id),{tipo:val('tipo')==='osmose'?'osmose':'hemodialise',marca:val('marca'),numeroSerie:serie,anoCompra:val('anoCompra')?Number(val('anoCompra')):'',hospitalId:val('hospitalId'),obs:val('obs'),criadoEm:old.criadoEm||iso(),atualizadoPor:S.uid,atualizadoEm:iso()}));
+      if(ok){S.maqTipo=val('tipo')==='osmose'?'osmose':'hemodialise';closeModal();toast('Máquina salva.')}
+    }
+  }
+  if(kind==='usuarioAdm'){
+    ok=await w(()=>updateDoc(D('usuarios',S.m.id),{nome:val('nome'),funcao:val('funcao'),telefone:val('telefone'),hospitalId:val('hospitalId'),papel:val('papel')==='admin'?'admin':'membro',atualizadoEm:iso()}));
+    if(ok){closeModal();toast('Usuário atualizado.')}
   }
   if(kind==='meuPerfil'){
     ok=await w(()=>updateDoc(D('usuarios',S.uid),{nome:val('nome'),funcao:val('funcao'),telefone:val('telefone'),hospitalId:val('hospitalId'),atualizadoEm:iso()}));

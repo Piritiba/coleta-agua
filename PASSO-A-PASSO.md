@@ -50,14 +50,17 @@ Tudo roda no plano gratuito do Firebase (Spark). Faça os passos **no computador
 2. Clique em **Adicionar domínio** e cole o endereço do Netlify, sem `https://` (ex.: `coleta-agua.netlify.app`).
 
 ## 8. Primeiro acesso (administrador)
-1. Abra o endereço do app e toque em **Criar cadastro** usando o **e-mail de administrador**.
-2. Confirme o e-mail pelo link que chega na caixa de entrada. Confira também o spam.
-3. No app, toque em **Sair** e **entre de novo**. Agora você é o administrador.
+1. Abra o endereço do app e toque em **Entrar com Google** usando o **e-mail de administrador**. Se preferir senha, use **Primeiro acesso** para criá-la.
+2. Se você criou senha, confirme o e-mail pelo link que chega na caixa de entrada (confira também o spam) e toque em **Já confirmei**.
+3. Pronto: a aba **Admin** aparece na barra de baixo.
 
-## 9. Convidar a equipe
-1. Envie o link do app para a equipe (Karbela, Bruna, Josenilson, Fátima…).
-2. Cada pessoa entra com o botão **Entrar com Google** ou cria um cadastro com o e-mail pessoal e uma senha.
-3. Em **Equipe → Aguardando aprovação**, toque em **Aprovar**. Use **Tornar admin** para dar à Karbela as mesmas permissões que você.
+## 9. Cadastrar a equipe (só administradores)
+1. Na aba **Admin**, toque em **+ Cadastrar usuário** e preencha o e-mail pessoal da pessoa (Gmail, Hotmail…), o nome, a função e a permissão:
+   - **Usuário:** vê tudo e atualiza o andamento das coletas (status, data, responsável, resultado, laudo).
+   - **Administrador:** também cadastra usuários, hospitais e o cronograma. Use para a Karbela, por exemplo.
+2. Envie o link do app para a pessoa. Ela entra com o Google ou cria uma senha em **Primeiro acesso**, sempre com o **mesmo e-mail** que você cadastrou.
+3. Quem tentar entrar com um e-mail que não foi cadastrado vê a mensagem “Acesso não liberado”.
+4. Ainda na aba **Admin**, você cadastra os hospitais (**+ Novo hospital**) e o cronograma (**+ Gerar cronograma**), edita usuários e remove acessos.
 
 ---
 
