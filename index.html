@@ -84,6 +84,7 @@ table.grid{border-collapse:collapse;min-width:760px;width:100%}
 .field>span{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;font-weight:500}
 .field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
 .field textarea{min-height:70px;resize:vertical}
+.field input[type=checkbox],.field input[type=radio]{width:auto;padding:0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fixed{padding:10px 12px;background:var(--bg);border-radius:10px;font-weight:600}
 .months{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
@@ -115,6 +116,28 @@ table.grid{border-collapse:collapse;min-width:760px;width:100%}
 .umenu button:hover{background:var(--bg)}
 .umenu button.out{color:var(--danger);border-top:1px solid var(--line)}
 .chip-user::after{content:' ▾';font-size:10px;opacity:.8}
+.crono{border-collapse:collapse;min-width:1180px;width:100%;font-size:12.5px;background:#fff}
+.crono th,.crono td{border:1px solid #9aa9ad;padding:5px 6px;vertical-align:top}
+.crono th{background:#f3f6f7;font-weight:700;text-align:left;white-space:nowrap}
+.crono th.cur{background:var(--brand-soft);color:var(--brand)}
+.crono td.tl{min-width:110px}
+.crono td.ex{min-width:130px;font-size:12px;line-height:1.35}
+.crono td.mc{padding:0;min-width:62px}
+.crono td.mc.cur{background:#f2faf9}
+.crono td.mc button{width:100%;min-height:100%;border:0;background:none;padding:5px 6px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;font:inherit;color:inherit}
+.crono td.mc button:hover{background:var(--bg)}
+.crono td.mc .q{font-size:13px}
+.crono td.mc.on .q{font-weight:700}
+.crono td.mc .lb{font-size:11.5px;line-height:1.25}
+.crono td.mc .pg{font-size:10.5px;font-weight:700;color:var(--c);margin-top:3px}
+.crono td.mc .pg.ok{color:var(--l)} .crono td.mc .pg.bad{color:var(--danger)}
+.crono .lk{background:none;border:0;padding:0;color:var(--brand);font-weight:600;text-decoration:underline;cursor:pointer;font:inherit}
+.docsheet{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-top:10px}
+.doctitle{text-align:center;font-weight:700;font-size:14px}
+.docnotes{font-size:13px;margin-top:12px}
+.swipe{text-align:center;margin:6px 0 0}
+@media(min-width:1000px){.swipe{display:none}}
+.docnotes p{margin:6px 0}
 .err{color:var(--danger);font-size:13px;margin:-4px 0 10px;min-height:1em}
 </style>
 </head>
@@ -154,7 +177,7 @@ const firebaseConfig = {
 /* E-mail(s) do administrador — o mesmo colocado nas regras do Firestore */
 const ADMIN_EMAILS = ["gustavo.s.almeida@gmail.com"];
 /* ===================================================================== */
-const APP_VERSION = "1.6";   // versão do app (veja CHANGELOG.md)
+const APP_VERSION = "1.7";   // versão do app (veja CHANGELOG.md)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -175,7 +198,7 @@ const ROUTES=['painel','cronograma','hospitais','equipe','admin','maquinas'];
 const now=new Date(), CUR_M=now.getMonth()+1, CUR_Y=now.getFullYear();
 
 const S={errCols:[],convChecked:false,convites:[],convUnsub:null,creating:false,uid:null,email:'',me:undefined,isAdmin:false,authMode:'login',
-  hospitais:[],coletas:[],usuarios:[],maquinas:[],maqTipo:'hemodialise',maqHosp:'',fresh:{h:false,c:false,u:false,m:false},err:false,
+  hospitais:[],coletas:[],usuarios:[],maquinas:[],cronogramas:[],maqTipo:'hemodialise',maqHosp:'',fresh:{h:false,c:false,u:false,m:false,g:false},err:false,
   route:'painel',mes:CUR_M,ano:CUR_Y,anoCrono:CUR_Y,m:null,unsubs:[],meUnsub:null,phase:'loading'};
 
 const $=s=>document.querySelector(s);
@@ -221,7 +244,7 @@ const AUTH_ERR={
   'auth/operation-not-allowed':'Login por e-mail não foi ativado no Firebase (veja o passo a passo).'};
 const authMsg=e=>AUTH_ERR[e&&e.code]||'Não foi possível concluir. Tente novamente.';
 
-function stopData(){S.unsubs.forEach(u=>u());S.unsubs=[];if(S.convUnsub){S.convUnsub();S.convUnsub=null}S.hospitais=[];S.coletas=[];S.usuarios=[];S.convites=[];S.maquinas=[];S.fresh={h:false,c:false,u:false,m:false}}
+function stopData(){S.unsubs.forEach(u=>u());S.unsubs=[];if(S.convUnsub){S.convUnsub();S.convUnsub=null}S.hospitais=[];S.coletas=[];S.usuarios=[];S.convites=[];S.maquinas=[];S.cronogramas=[];S.fresh={h:false,c:false,u:false,m:false,g:false}}
 const isOwnerEmail=e=>ADMIN_EMAILS.map(x=>x.toLowerCase()).includes(e);
 
 let curUser=null;
@@ -272,7 +295,7 @@ function startData(){
   const sub=(col,key,sort)=>onSnapshot(collection(fs,col),s=>{
     S[col]=s.docs.map(d=>({id:d.id,...d.data()})).sort(sort);S.fresh[key]=true;render();
   },e=>{console.error(col,e);if(!S.errCols.includes(col))S.errCols.push(col);S.fresh[key]=true;S.err=true;render()});
-  S.unsubs=[sub('maquinas','m',(a,b)=>String(a.numeroSerie||'').localeCompare(String(b.numeroSerie||''),'pt-BR')),sub('hospitais','h',byNome),sub('usuarios','u',byNome),sub('coletas','c',(a,b)=>(a.ano-b.ano)||(a.mes-b.mes))];
+  S.unsubs=[sub('cronogramas','g',(a,b)=>String(a.id).localeCompare(String(b.id))),sub('maquinas','m',(a,b)=>String(a.numeroSerie||'').localeCompare(String(b.numeroSerie||''),'pt-BR')),sub('hospitais','h',byNome),sub('usuarios','u',byNome),sub('coletas','c',(a,b)=>(a.ano-b.ano)||(a.mes-b.mes))];
 }
 
 function readHash(){const h=location.hash.slice(1);S.route=ROUTES.includes(h)?h:'painel'}
@@ -282,7 +305,7 @@ readHash();
 /* ---------- telas ---------- */
 function render(){
   const v=$('#view'),nav=$('#nav'),chip=$('#userChip'),ban=$('#banner');
-  ban.innerHTML=S.err?`<div class="banner err">Erro ao carregar os dados${S.errCols.length?' ('+S.errCols.map(c=>({hospitais:'hospitais',coletas:'coletas',usuarios:'usuários',maquinas:'máquinas'})[c]||c).join(', ')+')':''}. O Firebase recusou a leitura: confira se as regras da versão ${APP_VERSION} foram publicadas (Firestore → Regras → Publicar) e entre de novo.</div>`:'';
+  ban.innerHTML=S.err?`<div class="banner err">Erro ao carregar os dados${S.errCols.length?' ('+S.errCols.map(c=>({hospitais:'hospitais',coletas:'coletas',usuarios:'usuários',maquinas:'máquinas',cronogramas:'cronograma'})[c]||c).join(', ')+')':''}. O Firebase recusou a leitura: confira se as regras da versão ${APP_VERSION} foram publicadas (Firestore → Regras → Publicar) e entre de novo.</div>`:'';
   nav.hidden=true;chip.hidden=true;if(S.phase!=='app')closeMenu();
   if(!configured){v.innerHTML=`<div class="hero"><h2>Falta configurar o Firebase</h2><p>Abra o arquivo <b>index.html</b>, cole os dados do seu projeto Firebase em <code>firebaseConfig</code> e seu e-mail em <code>ADMIN_EMAILS</code>. Veja o arquivo PASSO-A-PASSO.</p></div>`;return}
   if(S.phase==='loading'){v.innerHTML='<div class="spin"></div><p class="note" style="text-align:center">Carregando…</p>';return}
@@ -293,7 +316,7 @@ function render(){
   nav.hidden=false;chip.hidden=false;chip.textContent=(S.me&&S.me.nome)||S.email;
   $('#navAdmin').hidden=!S.isAdmin;
   nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.r===(S.route==='maquinas'?'admin':S.route)));
-  if(!(S.fresh.h&&S.fresh.c&&S.fresh.u&&S.fresh.m)&&!S.err){v.innerHTML='<div class="spin"></div>';return}
+  if(!(S.fresh.h&&S.fresh.c&&S.fresh.u&&S.fresh.m&&S.fresh.g)&&!S.err){v.innerHTML='<div class="spin"></div>';return}
   v.innerHTML=({painel:painelView,cronograma:cronoView,hospitais:hospView,equipe:equipeView,admin:adminView,maquinas:maquinasView})[S.route]();
 }
 
@@ -338,6 +361,7 @@ function coletaCard(c){
   const resp=uname(c.responsavelId);const next=i<3?STATUS[i+1]:null;const url=safeUrl(c.laudoUrl);
   return `<div class="card ${late?'late':''}">
     <div class="spread"><div class="t">${esc(hname(h))}</div>${pill(c.status)}</div>
+    ${c.tipoColeta?`<div class="m" style="color:var(--ink);font-weight:500">🧪 ${esc(c.tipoColeta)}${c.linhaId?' · '+maqCount(c.equipamento,c.hospitalId)+' ponto(s)':''}</div>`:''}
     <div class="m">${late?`<span class="pill s-late">Atrasada · ${MES3[c.mes-1]}/${c.ano}</span> `:''}
       Coleta: <b>${esc(resp||'a definir')}</b> · Cobrança: <b>${esc(cob||(h&&h.contato)||'a definir')}</b>
       ${c.dataColeta?` · Coletado em ${fmtData(c.dataColeta)}`:''}</div>
@@ -353,7 +377,7 @@ function coletaCard(c){
     </div></div>`;
 }
 function painelView(){
-  const list=S.coletas.filter(c=>c.ano===S.ano&&c.mes===S.mes).sort((a,b)=>hname(hosp(a.hospitalId)).localeCompare(hname(hosp(b.hospitalId)),'pt-BR'));
+  const list=S.coletas.filter(c=>c.ano===S.ano&&c.mes===S.mes).sort((a,b)=>String(a.tipoColeta||'').localeCompare(String(b.tipoColeta||''),'pt-BR')||hname(hosp(a.hospitalId)).localeCompare(hname(hosp(b.hospitalId)),'pt-BR'));
   const isCur=S.ano===CUR_Y&&S.mes===CUR_M;const late=isCur?S.coletas.filter(isLate):[];
   const cnt=k=>list.filter(c=>c.status===k).length;
   return `<div class="spread"><h2>Painel do mês</h2>
@@ -365,21 +389,171 @@ function painelView(){
     ${list.length?`<div class="cards">${list.map(coletaCard).join('')}</div>`
       :`<div class="empty">Nenhuma coleta prevista para este mês.${S.isAdmin?'<br><br><button class="btn sec" data-act="nav" data-r="cronograma">Abrir cronograma</button>':''}</div>`}`;
 }
-function cronoView(){
-  const y=S.anoCrono;const map={};S.coletas.filter(c=>c.ano===y).forEach(c=>map[c.hospitalId+'_'+c.mes]=c);
-  const rows=S.hospitais.map(h=>`<tr><td class="h" title="${esc(h.nome)}">${esc(h.sigla||h.nome)}</td>${MES3.map((_,i)=>{
-    const c=map[h.id+'_'+(i+1)];
-    if(c){const s=ST[c.status]||ST.pendente;return `<td><button class="cell s-${s.k} ${isLate(c)?'late':''}" title="${esc(s.l)}" data-act="coleta" data-id="${esc(c.id)}">${s.s}</button></td>`}
-    return `<td>${S.isAdmin?`<button class="cell none" aria-label="Adicionar" data-act="novaColeta" data-h="${esc(h.id)}" data-m="${i+1}">+</button>`:''}</td>`;
-  }).join('')}</tr>`).join('');
-  return `<div class="spread"><h2>Cronograma</h2>
-    <div class="row"><div class="stepper"><button data-act="ano" data-d="-1" aria-label="Ano anterior">‹</button><span style="min-width:60px">${y}</span><button data-act="ano" data-d="1" aria-label="Próximo ano">›</button></div>
-    ${S.isAdmin?'<button class="btn" data-act="gerar">+ Gerar cronograma</button>':''}</div></div>
-    ${S.hospitais.length?`<div class="tablewrap"><table class="grid"><thead><tr><th class="h">Hospital</th>${MES3.map((m,i)=>`<th class="${y===CUR_Y&&i+1===CUR_M?'cur':''}">${m}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="legend">${STATUS.map(s=>`<span class="pill s-${s.k}">${s.s} · ${s.l}</span>`).join('')}<span class="pill s-late">Contorno vermelho = atrasada</span></div>
-    <p class="note">${S.isAdmin?'Toque em “+” para incluir uma coleta num mês, ou em uma letra para ver e editar.':'Toque em uma letra para ver a coleta e atualizar o status.'}</p>`
-    :`<div class="empty">Nenhum hospital cadastrado ainda.${S.isAdmin?'<br><br><button class="btn sec" data-act="hospital">+ Novo hospital</button>':' O administrador fará o cadastro.'}</div>`}`;
+/* ---------- cronograma (formato Humaniza) ---------- */
+const MODELO_HUMANIZA={
+  linhas:[
+    {periodicidade:'Mensal',tipoColeta:'Coleta microbiológica nas osmoses',equipamento:'osmose',
+     exames:'Bactérias heterotróficas\nColiformes Totais\nEndotoxinas\nColiformes termotolerantes',
+     meses:Object.fromEntries([1,2,3,4,5,6,7,8,9,10,11,12].map(m=>[m,{modo:'todos',qtd:10}]))},
+    {periodicidade:'Semestral',tipoColeta:'Coleta de Físico Químico nas osmoses',equipamento:'osmose',
+     exames:'Alumínio\nAntimônio\nArsênico\nBário Total\nBerílio Total\nCádmio Total\nCálcio Total\nChumbo Total\nCobre Total\nCromo Total\nFluoreto\nMagnésio Total\nMercúrio\nNitrato\nPotássio Total\nPrata Total\nSelênio Total\nSódio Total\nSulfato\nZinco Total',
+     meses:{4:{modo:'lista',siglas:['HJV','HC'],qtd:5},5:{modo:'exceto',siglas:['HJV','HC'],qtd:5,rotulo:'demais hospitais'},11:{modo:'todos',qtd:10}}},
+    {periodicidade:'Anual',tipoColeta:'Coleta microbiológica do dialisato (máquinas de HD)',equipamento:'hemodialise',
+     exames:'Bactérias heterotróficas\nColiformes Totais',
+     meses:{4:{modo:'lista',siglas:['HJV','HC'],qtd:5},5:{modo:'exceto',siglas:['HJV','HC'],qtd:5,rotulo:'demais hospitais'}}}
+  ],
+  equipamentosTexto:'- Osmoses: 10 (HC 3, HJV 2, HMV 1, H2J 2, Blan 1)\n- Máquinas: 10 (HC 3, HJV 2, HMV 1, H2J 2, Blanc 1)',
+  obs:'Não estão inclusas as 2 máquinas paradas no Hospital da Cidade e no Manoel Victorino. Programar coleta quando as máquinas estiverem em funcionamento.\nA partir de março/26 a máquina e osmose do HMTF (Teixeira de Freitas) análise de água é por conta deles.'
+};
+const newId=()=>'l'+Math.random().toString(36).slice(2,8);
+const crono=y=>S.cronogramas.find(g=>g.id===String(y));
+const cellOn=c=>!!(c&&c.modo&&c.modo!=='nenhum');
+const joinE=a=>a.length<=1?(a[0]||''):a.slice(0,-1).join(', ')+' e '+a[a.length-1];
+const hSigla=id=>{const h=hosp(id);return h?(h.sigla||h.nome):''};
+function resolveCell(cell){
+  if(!cellOn(cell))return [];
+  const all=S.hospitais.map(h=>h.id),sel=(cell.hospitais||[]);
+  if(cell.modo==='todos')return all;
+  if(cell.modo==='exceto')return all.filter(id=>!sel.includes(id));
+  return sel.filter(id=>hosp(id));
 }
+function cellQtd(l,cell){
+  if(!cellOn(cell))return 0;
+  if(cell.qtd!==''&&cell.qtd!=null&&!isNaN(Number(cell.qtd)))return Number(cell.qtd);
+  return resolveCell(cell).reduce((t,h)=>t+maqCount(l.equipamento,h),0);
+}
+function cellLabel(cell){
+  if(!cellOn(cell))return '';
+  if(cell.rotulo)return cell.rotulo;
+  if(cell.modo==='todos')return '';
+  return joinE(resolveCell(cell).map(hSigla).filter(Boolean));
+}
+function equipResumo(){
+  const r=t=>{const per=S.hospitais.map(h=>[h.sigla||h.nome,maqCount(t,h.id)]).filter(x=>x[1]);return `${maqCount(t)} (${per.map(x=>x[0]+' '+x[1]).join(', ')||'—'})`};
+  return `- Osmoses: ${r('osmose')}\n- Máquinas: ${r('hemodialise')}`;
+}
+function cronoView(){
+  const y=S.anoCrono,yy=String(y).slice(2),g=crono(y);
+  const head=`<div class="spread"><h2>Cronograma</h2>
+    <div class="row"><div class="stepper"><button data-act="ano" data-d="-1" aria-label="Ano anterior">‹</button><span style="min-width:60px">${y}</span><button data-act="ano" data-d="1" aria-label="Próximo ano">›</button></div></div></div>`;
+  if(!g){
+    const ant=crono(y-1);
+    return head+`<div class="empty">Ainda não há cronograma de análise de água para ${y}.${S.isAdmin?`<br><br>
+      <div class="row" style="justify-content:center"><button class="btn" data-act="cronoModelo">Criar a partir do modelo Humaniza</button>
+      ${ant?`<button class="btn sec" data-act="cronoCopiar">Copiar de ${y-1}</button>`:''}
+      <button class="btn ghost" data-act="cronoBranco">Criar em branco</button></div>`:' O administrador fará o cadastro.'}</div>`;
+  }
+  const linhas=g.linhas||[];
+  const rows=linhas.map(l=>`<tr>
+    <td class="tl">${S.isAdmin?`<button class="lk" data-act="linha" data-id="${esc(l.id)}">${esc(l.periodicidade)}</button>`:esc(l.periodicidade)}</td>
+    <td class="tl">${esc(l.tipoColeta)}</td>
+    <td class="tl ex">${esc(l.exames).replace(/\n/g,'<br>')}</td>
+    ${MES3.map((_,i)=>{const m=i+1,cell=(l.meses||{})[m];const on=cellOn(cell);
+      const cs=S.coletas.filter(c=>c.ano===y&&c.mes===m&&c.linhaId===l.id);
+      const done=cs.filter(c=>(ST[c.status]||ST.pendente).i>=2).length,late=cs.some(isLate);
+      const lab=cellLabel(cell);
+      return `<td class="mc ${on?'on':''} ${y===CUR_Y&&m===CUR_M?'cur':''}"><button data-act="cell" data-l="${esc(l.id)}" data-m="${m}">
+        <span class="q">${on?cellQtd(l,cell):0}</span>${lab?`<span class="lb">(${esc(lab)})</span>`:''}
+        ${cs.length?`<span class="pg ${done===cs.length?'ok':late?'bad':''}">${done===cs.length?'✓':late?'!':'●'} ${done}/${cs.length}</span>`:''}</button></td>`}).join('')}
+  </tr>`).join('');
+  return head+`
+  <div class="docsheet">
+    <div class="doctitle">${esc(g.titulo||('CRONOGRAMA DE REALIZAÇÃO DE ANÁLISE DE ÁGUA - '+y))}</div>
+    <p class="note swipe">↔ Deslize a tabela para o lado para ver os meses.</p><div class="tablewrap" style="margin-top:8px"><table class="crono"><thead><tr><th>Periodicidade</th><th>Tipo de coleta</th><th>Exames</th>
+      ${MES3.map((m,i)=>`<th class="${y===CUR_Y&&i+1===CUR_M?'cur':''}">${m}/${yy}</th>`).join('')}</tr></thead>
+      <tbody>${rows||`<tr><td colspan="15" class="tl" style="text-align:center;color:var(--muted)">Nenhuma linha. ${S.isAdmin?'Use “+ Nova linha”.':''}</td></tr>`}</tbody></table></div>
+    <div class="docnotes">
+      <p>Esse cronograma e as quantidades de pontos foi elaborado considerando o seguinte quantitativo de equipamentos:</p>
+      <p>${esc(g.equipamentosTexto||equipResumo()).replace(/\n/g,'<br>')}</p>
+      ${g.obs?`<p><b>OBS:</b></p><p>${esc(g.obs).replace(/\n/g,'<br>')}</p>`:''}
+      ${S.maquinas.length?`<p class="note">Pelo cadastro de máquinas do app hoje:<br>${esc(equipResumo()).replace(/\n/g,'<br>')}</p>`:''}
+    </div>
+  </div>
+  <div class="legend"><span class="pill s-coletado">em andamento</span><span class="pill s-laudo">✓ todas coletadas</span><span class="pill s-late">! atrasada</span></div>
+  <p class="note">Toque num mês para ver os hospitais daquela coleta e atualizar o andamento.${S.isAdmin?' Toque na periodicidade para editar a linha.':''}</p>
+  ${S.isAdmin?`<div class="row" style="margin-top:10px"><button class="btn sec" data-act="linha">+ Nova linha</button><button class="btn sec" data-act="cronoNotas">Editar título e observações</button><button class="btn ghost" data-act="cronoSync">Atualizar coletas dos hospitais</button></div>`:''}`;
+}
+function cellModal(lid,m){
+  const y=S.anoCrono,g=crono(y);if(!g)return;const l=(g.linhas||[]).find(x=>x.id===lid);if(!l)return;
+  const cell=(l.meses||{})[m]||{modo:'nenhum'};S.m={type:'cell',lid,mes:m};
+  const cs=S.coletas.filter(c=>c.ano===y&&c.mes===m&&c.linhaId===lid).sort((a,b)=>hname(hosp(a.hospitalId)).localeCompare(hname(hosp(b.hospitalId)),'pt-BR'));
+  const sel=cell.hospitais||[];
+  openModal(`<h2>${esc(l.tipoColeta)}</h2>
+    <div class="m">${esc(l.periodicidade)} · ${MESES[m-1]} ${y} · <b>${cellOn(cell)?cellQtd(l,cell):0} ponto(s)</b>${cellLabel(cell)?' ('+esc(cellLabel(cell))+')':''}</div>
+    <h3>Coletas nos hospitais (${cs.length})</h3>
+    ${cs.length?cs.map(c=>`<div class="card click" data-act="coleta" data-id="${esc(c.id)}" style="padding:10px 12px;margin-bottom:6px">
+      <div class="spread"><b>${esc(hname(hosp(c.hospitalId)))}</b>${pill(c.status)}</div>
+      <div class="m">${maqCount(l.equipamento,c.hospitalId)} ${l.equipamento==='osmose'?'osmose(s)':'máquina(s) de HD'}${isLate(c)?' · <span style="color:var(--danger)">atrasada</span>':''}</div></div>`).join('')
+      :`<p class="note">${cellOn(cell)?'Nenhuma coleta gerada. '+(S.isAdmin?'Confira se os hospitais estão cadastrados e salve abaixo.':''):'Sem coleta neste mês.'}</p>`}
+    ${S.isAdmin?`<form data-form="cell" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <h3 style="margin-top:0">Editar este mês (administrador)</h3>
+      <label class="field"><span>Quais hospitais</span><select name="modo">
+        <option value="nenhum" ${!cellOn(cell)?'selected':''}>Sem coleta neste mês (0)</option>
+        <option value="todos" ${cell.modo==='todos'?'selected':''}>Todos os hospitais</option>
+        <option value="lista" ${cell.modo==='lista'?'selected':''}>Somente os marcados abaixo</option>
+        <option value="exceto" ${cell.modo==='exceto'?'selected':''}>Todos, exceto os marcados abaixo (demais hospitais)</option></select></label>
+      <div class="field"><span>Hospitais (para “somente” ou “exceto”)</span><div class="months" style="grid-template-columns:repeat(2,1fr)">${S.hospitais.map(h=>`<label><input type="checkbox" name="h" value="${esc(h.id)}" ${sel.includes(h.id)?'checked':''}>${esc(h.sigla||h.nome)}</label>`).join('')||'<span class="note">Nenhum hospital cadastrado.</span>'}</div></div>
+      <div class="two"><label class="field"><span>Quantidade de pontos</span><input name="qtd" type="number" min="0" value="${esc(cell.qtd)}" placeholder="automático"></label>
+      <label class="field"><span>Texto entre parênteses</span><input name="rotulo" value="${esc(cell.rotulo)}" placeholder="ex.: demais hospitais"></label></div>
+      <p class="note" style="margin-top:-4px">Deixe a quantidade vazia para calcular pelo cadastro de máquinas. Deixe o texto vazio para mostrar as siglas (ex.: HJV e HC).</p>
+      <div class="foot"><button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar mês</button></div></form>`
+    :`<div class="foot" style="margin-top:12px"><button type="button" class="btn ghost" data-act="close">Fechar</button></div>`}`);
+}
+function linhaModal(id){
+  const g=crono(S.anoCrono);if(!g)return;const l=id?(g.linhas||[]).find(x=>x.id===id)||{}:{equipamento:'osmose'};
+  S.m={type:'linha',id:id||null,confirm:false};
+  openModal(`<h2>${id?'Editar linha':'Nova linha'}</h2><form data-form="linha">
+    <label class="field"><span>Periodicidade</span><input name="periodicidade" list="perList" required value="${esc(l.periodicidade)}" placeholder="Mensal, Semestral, Anual…">
+      <datalist id="perList"><option>Mensal</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></datalist></label>
+    <label class="field"><span>Tipo de coleta</span><input name="tipoColeta" required value="${esc(l.tipoColeta)}"></label>
+    <label class="field"><span>Exames (um por linha)</span><textarea name="exames" style="min-height:120px">${esc(l.exames)}</textarea></label>
+    <label class="field"><span>Equipamento coletado</span><select name="equipamento"><option value="osmose" ${l.equipamento!=='hemodialise'?'selected':''}>Osmoses</option><option value="hemodialise" ${l.equipamento==='hemodialise'?'selected':''}>Máquinas de hemodiálise (dialisato)</option></select></label>
+    <div class="foot">${id?'<button type="button" class="btn danger left" data-act="delLinha">Excluir linha</button>':''}
+      <button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+function notasModal(){
+  const g=crono(S.anoCrono);if(!g)return;S.m={type:'notas'};
+  openModal(`<h2>Título e observações</h2><form data-form="notas">
+    <label class="field"><span>Título</span><input name="titulo" value="${esc(g.titulo)}"></label>
+    <label class="field"><span>Quantitativo de equipamentos (texto do documento)</span><textarea name="equipamentosTexto" style="min-height:80px">${esc(g.equipamentosTexto)}</textarea></label>
+    <p class="note" style="margin-top:-6px">Deixe vazio para usar automaticamente o cadastro de máquinas.</p>
+    <label class="field"><span>OBS</span><textarea name="obs" style="min-height:110px">${esc(g.obs)}</textarea></label>
+    <div class="foot"><button type="button" class="btn ghost" data-act="close">Fechar</button><button class="btn">Salvar</button></div></form>`);
+}
+async function salvarCrono(g){
+  g={...g};delete g.id;g.atualizadoEm=iso();g.atualizadoPor=S.uid;
+  return await w(()=>setDoc(D('cronogramas',String(g.ano)),g));
+}
+async function syncCrono(y,silent){
+  const g=crono(y);if(!g)return;
+  const want={};
+  (g.linhas||[]).forEach(l=>{for(let m=1;m<=12;m++){const cell=(l.meses||{})[m];resolveCell(cell).forEach(hid=>{want[`${y}_${m}_${l.id}_${hid}`]={l,m,hid}})}});
+  const exist=S.coletas.filter(c=>c.ano===y&&c.linhaId);
+  let criadas=0,removidas=0,mantidas=0;
+  for(const [id,v] of Object.entries(want)){
+    const c=S.coletas.find(x=>x.id===id);
+    if(!c){if(!await w(()=>setDoc(D('coletas',id),{ano:y,mes:v.m,hospitalId:v.hid,linhaId:v.l.id,tipoColeta:v.l.tipoColeta,periodicidade:v.l.periodicidade,equipamento:v.l.equipamento,status:'pendente',responsavelId:'',dataColeta:'',resultado:'',laudoUrl:'',obs:'',criadoEm:iso(),atualizadoPor:S.uid,atualizadoEm:iso()})))return;criadas++}
+    else if(c.tipoColeta!==v.l.tipoColeta||c.periodicidade!==v.l.periodicidade||c.equipamento!==v.l.equipamento){await w(()=>updateDoc(D('coletas',id),{tipoColeta:v.l.tipoColeta,periodicidade:v.l.periodicidade,equipamento:v.l.equipamento}))}
+  }
+  for(const c of exist){
+    if(want[c.id])continue;
+    const intocada=c.status==='pendente'&&!c.dataColeta&&!c.laudoUrl&&!c.resultado&&!c.obs;
+    if(intocada){if(await w(()=>deleteDoc(D('coletas',c.id))))removidas++}else mantidas++;
+  }
+  if(!silent||criadas||removidas||mantidas)toast(`Coletas: ${criadas} criada(s), ${removidas} removida(s)${mantidas?`, ${mantidas} mantida(s) por já terem andamento`:''}.`);
+}
+async function criarCrono(base){
+  const y=S.anoCrono;const faltam=new Set();
+  const bySigla=sg=>{const h=S.hospitais.find(x=>String(x.sigla||'').trim().toUpperCase()===sg.toUpperCase());if(!h)faltam.add(sg);return h?h.id:null};
+  const linhas=(base.linhas||[]).map(l=>({id:newId(),periodicidade:l.periodicidade,tipoColeta:l.tipoColeta,exames:l.exames,equipamento:l.equipamento,
+    meses:Object.fromEntries(Object.entries(l.meses||{}).map(([m,c])=>[m,{modo:c.modo,hospitais:c.siglas?c.siglas.map(bySigla).filter(Boolean):(c.hospitais||[]),qtd:c.qtd??'',rotulo:c.rotulo||''}]))}));
+  const g={ano:y,titulo:'CRONOGRAMA DE REALIZAÇÃO DE ANÁLISE DE ÁGUA - '+y,linhas,equipamentosTexto:base.equipamentosTexto||'',obs:base.obs||''};
+  if(await salvarCrono(g)){
+    toast(faltam.size?`Cronograma criado. Hospitais não encontrados pela sigla: ${[...faltam].join(', ')}. Cadastre-os e ajuste os meses.`:'Cronograma criado.');
+    setTimeout(()=>syncCrono(y,true),800);
+  }
+}
+
 function hospView(){
   return `<div class="spread"><h2>Hospitais</h2>${S.isAdmin?'<button class="btn" data-act="hospital">+ Novo hospital</button>':''}</div>
   ${S.hospitais.length?`<div class="cards">${S.hospitais.map(h=>{const n=S.coletas.filter(c=>c.hospitalId===h.id&&c.ano===CUR_Y).length;
@@ -410,7 +584,7 @@ function adminView(){
   <div class="stats" style="margin-top:0">
     <button class="btn" data-act="convite">+ Cadastrar usuário</button>
     <button class="btn" data-act="hospital">+ Novo hospital</button>
-    <button class="btn" data-act="gerar" ${S.hospitais.length?'':'disabled'}>+ Gerar cronograma</button>
+    <button class="btn" data-act="nav" data-r="cronograma">📅 Cronograma</button>
     <button class="btn" data-act="nav" data-r="maquinas">⚙️ Cadastro de máquinas</button>
   </div>
   <h3>Usuários cadastrados — aguardando primeiro acesso (${S.convites.length})</h3>
@@ -445,7 +619,7 @@ function coletaModal(id,hospitalId,mes,ano){
   const d=c||{hospitalId,mes:mes||S.mes,ano:ano||S.ano,status:'pendente'};
   S.m={type:'coleta',id:c?c.id:null,confirm:false};const url=safeUrl(d.laudoUrl);
   openModal(`<h2>${c?'Coleta':'Nova coleta'}</h2><form data-form="coleta">
-    ${c?`<div class="field"><span>Hospital e mês</span><div class="fixed">${esc(hname(hosp(c.hospitalId)))} · ${MESES[c.mes-1]} ${c.ano}</div></div>`
+    ${c?`<div class="field"><span>${esc(c.tipoColeta||'Coleta')}</span><div class="fixed">${esc(hname(hosp(c.hospitalId)))} · ${MESES[c.mes-1]} ${c.ano}${c.linhaId?' · '+maqCount(c.equipamento,c.hospitalId)+' ponto(s)':''}</div></div>`
     :`<label class="field"><span>Hospital</span><select name="hospitalId" required>${S.hospitais.map(h=>`<option value="${esc(h.id)}" ${d.hospitalId===h.id?'selected':''}>${esc(hname(h))}</option>`).join('')}</select></label>
       <div class="two"><label class="field"><span>Mês</span><select name="mes">${MESES.map((m,i)=>`<option value="${i+1}" ${d.mes===i+1?'selected':''}>${m}</option>`).join('')}</select></label>
       <label class="field"><span>Ano</span><input name="ano" type="number" min="2024" max="2040" value="${d.ano}"></label></div>`}
@@ -600,10 +774,19 @@ const ACT={
   mes:d=>{let m=S.mes+Number(d.d),y=S.ano;if(m<1){m=12;y--}if(m>12){m=1;y++}S.mes=m;S.ano=y;render()},
   ano:d=>{S.anoCrono+=Number(d.d);render()},
   coleta:d=>coletaModal(d.id),
-  novaColeta:d=>coletaModal(null,d.h,Number(d.m),S.anoCrono),
   hospital:d=>hospitalModal(d.id),
   hospDet:d=>hospDetalheModal(d.id),
-  gerar:()=>gerarModal(),
+  cell:d=>cellModal(d.l,Number(d.m)),
+  linha:d=>linhaModal(d.id),
+  cronoNotas:()=>notasModal(),
+  cronoModelo:async(d,btn)=>{btn.disabled=true;await criarCrono(MODELO_HUMANIZA);btn.disabled=false},
+  cronoCopiar:async(d,btn)=>{const a=crono(S.anoCrono-1);if(!a)return;btn.disabled=true;
+    await criarCrono({linhas:(a.linhas||[]).map(l=>({...l,meses:Object.fromEntries(Object.entries(l.meses||{}).map(([m,c])=>[m,{...c}]))})),equipamentosTexto:a.equipamentosTexto,obs:a.obs});btn.disabled=false},
+  cronoBranco:async(d,btn)=>{btn.disabled=true;await criarCrono({linhas:[],equipamentosTexto:'',obs:''});btn.disabled=false},
+  cronoSync:async(d,btn)=>{btn.disabled=true;await syncCrono(S.anoCrono);btn.disabled=false},
+  delLinha:async(d,btn)=>{if(!S.m.confirm){S.m.confirm=true;btn.textContent='Confirmar (apaga as coletas pendentes da linha)';return}
+    const g=crono(S.anoCrono);btn.disabled=true;
+    if(await salvarCrono({...g,linhas:(g.linhas||[]).filter(l=>l.id!==S.m.id)})){closeModal();toast('Linha excluída.');setTimeout(()=>syncCrono(S.anoCrono,true),800)}else btn.disabled=false},
   meuPerfil:()=>{if(S.isAdmin)perfilModal()},
   todosMeses:()=>document.querySelectorAll('.months input').forEach(i=>i.checked=true),
   convite:d=>conviteModal(d.id),
@@ -694,9 +877,32 @@ document.addEventListener('submit',async e=>{
     else{
       let status=val('status')||'pendente';const laudoUrl=val('laudoUrl');
       if(laudoUrl&&ST[status].i<4&&!(c&&c.laudoUrl===laudoUrl))status='laudo';
-      ok=await w(()=>setDoc(D('coletas',id),{hospitalId,mes,ano,status,responsavelId:val('responsavelId'),dataColeta:val('dataColeta'),resultado:val('resultado'),laudoUrl,obs:val('obs'),criadoEm:(c&&c.criadoEm)||iso(),atualizadoPor:S.uid,atualizadoEm:iso()}));
+      const base={...(c||{})};delete base.id;
+      ok=await w(()=>setDoc(D('coletas',id),{...base,hospitalId,mes,ano,status,responsavelId:val('responsavelId'),dataColeta:val('dataColeta'),resultado:val('resultado'),laudoUrl,obs:val('obs'),criadoEm:(c&&c.criadoEm)||iso(),atualizadoPor:S.uid,atualizadoEm:iso()}));
       if(ok){closeModal();toast('Coleta salva.')}
     }
+  }
+  if(kind==='cell'){
+    const g=crono(S.anoCrono);const modo=val('modo');const hs=f.getAll('h');
+    if((modo==='lista')&&!hs.length)toast('Marque pelo menos um hospital.');
+    else{
+      const linhas=(g.linhas||[]).map(l=>{if(l.id!==S.m.lid)return l;const meses={...(l.meses||{})};
+        if(modo==='nenhum')delete meses[S.m.mes];else meses[S.m.mes]={modo,hospitais:(modo==='todos'?[]:hs),qtd:val('qtd')===''?'':Number(val('qtd')),rotulo:val('rotulo')};
+        return {...l,meses}});
+      ok=await salvarCrono({...g,linhas});
+      if(ok){closeModal();toast('Mês salvo.');setTimeout(()=>syncCrono(S.anoCrono,true),800)}
+    }
+  }
+  if(kind==='linha'){
+    const g=crono(S.anoCrono);const dados={periodicidade:val('periodicidade'),tipoColeta:val('tipoColeta'),exames:String(f.get('exames')||'').split('\n').map(x=>x.trim()).filter(Boolean).join('\n'),equipamento:val('equipamento')==='hemodialise'?'hemodialise':'osmose'};
+    const linhas=S.m.id?(g.linhas||[]).map(l=>l.id===S.m.id?{...l,...dados}:l):[...(g.linhas||[]),{id:newId(),...dados,meses:{}}];
+    ok=await salvarCrono({...g,linhas});
+    if(ok){closeModal();toast('Linha salva.');if(S.m===null)setTimeout(()=>syncCrono(S.anoCrono,true),800)}
+  }
+  if(kind==='notas'){
+    const g=crono(S.anoCrono);
+    ok=await salvarCrono({...g,titulo:val('titulo'),equipamentosTexto:String(f.get('equipamentosTexto')||'').trim(),obs:String(f.get('obs')||'').trim()});
+    if(ok){closeModal();toast('Observações salvas.')}
   }
   if(kind==='gerar'){
     const hospitalId=val('hospitalId'),ano=Number(val('ano'));const meses=f.getAll('m').map(Number);

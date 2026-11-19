@@ -65,6 +65,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Cronograma anual (formato Humaniza): todos veem; só administradores criam e alteram.
+    match /cronogramas/{ano} {
+      allow read: if approved();
+      allow write: if isAdmin();
+    }
+
     // Cronograma de coletas: só administradores criam e excluem;
     // usuários atualizam o andamento, sem mudar hospital, mês ou ano.
     match /coletas/{id} {
@@ -73,7 +79,9 @@ service cloud.firestore {
       allow update: if isAdmin() || (approved()
         && request.resource.data.hospitalId == resource.data.hospitalId
         && request.resource.data.mes == resource.data.mes
-        && request.resource.data.ano == resource.data.ano);
+        && request.resource.data.ano == resource.data.ano
+        && request.resource.data.get('linhaId', '') == resource.data.get('linhaId', '')
+        && request.resource.data.get('tipoColeta', '') == resource.data.get('tipoColeta', ''));
     }
   }
 }

@@ -2,6 +2,14 @@
 
 A versão atual aparece no rodapé da tela **Equipe** e na tela de login.
 
+## v1.7 — 19/11/2026
+- **Cronograma no formato do documento da Humaniza:** tabela com Periodicidade, Tipo de coleta, Exames e os 12 meses (Jan/27 … Dez/27), mostrando a quantidade de pontos e, quando for o caso, os hospitais entre parênteses — ex.: "5 (HJV e HC)", "5 (demais hospitais)". Abaixo, o quantitativo de equipamentos e as OBS, como no documento.
+- Botão **"Criar a partir do modelo Humaniza"** (administrador): monta o cronograma com as 3 linhas do documento 2027 (microbiológica mensal nas osmoses, físico-químico semestral nas osmoses e microbiológica anual do dialisato). Também é possível copiar do ano anterior ou criar em branco.
+- Cada mês da tabela gera automaticamente as coletas de cada hospital; tocar no mês mostra os hospitais e o andamento (✓ todas coletadas, ● em andamento, ! atrasada).
+- Administrador edita linhas (periodicidade, tipo, exames, equipamento), cada mês (todos, somente alguns hospitais, ou "demais hospitais"; quantidade de pontos; texto entre parênteses), título e OBS.
+- No Painel do mês, cada coleta mostra o tipo de coleta e o número de pontos.
+- **Regras do Firebase mudaram:** é preciso colar o novo `firestore.rules`.
+
 ## v1.6 — 19/11/2026
 - **Só administradores alteram cadastros.** Usuários comuns não editam mais nem o próprio cadastro: a opção "Meu cadastro" e o botão "Editar" da Equipe aparecem só para administradores. Para corrigir dados, o usuário fala com um administrador.
 - Continua só de administradores: cadastro de usuários, hospitais, máquinas e cronograma (criar/excluir coletas).
