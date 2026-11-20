@@ -2,6 +2,12 @@
 
 A versão atual aparece no rodapé da tela **Equipe** e na tela de login.
 
+## v1.9 — 19/11/2026
+- **Correção no Cadastro de máquinas:** as abas Hemodiálise e Osmose agora mostram a quantidade **do filtro escolhido** (antes mostravam o total de todos os hospitais enquanto a lista mostrava só o hospital filtrado, o que parecia "quantidade errada" e "só uma de cada").
+- Linha de resumo abaixo das abas: sem filtro, mostra o total cadastrado de hemodiálise e osmose; com filtro, mostra "mostrando X de Y" e o botão **Limpar filtro**.
+- O filtro volta para "Todos os hospitais" sempre que a tela de máquinas é aberta.
+- Regras do Firebase **não mudaram**: basta enviar o `index.html`.
+
 ## v1.8 — 19/11/2026
 - **Cadastro de hospital simplificado:** só Nome, Sigla, Enfermeira que cobra a coleta, Contato no hospital e Observações (saíram "Nº de máquinas" e "Pontos de coleta"; as máquinas vêm do Cadastro de máquinas).
 - **Cadastro de máquinas:** o filtro "Filtrar por hospital" agora fica no topo, acima do título e das abas.

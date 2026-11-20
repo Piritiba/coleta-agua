@@ -177,7 +177,7 @@ const firebaseConfig = {
 /* E-mail(s) do administrador — o mesmo colocado nas regras do Firestore */
 const ADMIN_EMAILS = ["gustavo.s.almeida@gmail.com"];
 /* ===================================================================== */
-const APP_VERSION = "1.8";   // versão do app (veja CHANGELOG.md)
+const APP_VERSION = "1.9";   // versão do app (veja CHANGELOG.md)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -299,7 +299,7 @@ function startData(){
 }
 
 function readHash(){const h=location.hash.slice(1);S.route=ROUTES.includes(h)?h:'painel'}
-window.addEventListener('hashchange',()=>{closeModal();closeMenu();readHash();render();scrollTo(0,0)});
+window.addEventListener('hashchange',()=>{closeModal();closeMenu();const antes=S.route;readHash();if(S.route==='maquinas'&&antes!=='maquinas')S.maqHosp='';render();scrollTo(0,0)});
 readHash();
 
 /* ---------- telas ---------- */
@@ -724,7 +724,9 @@ function maquinasView(){
   return `<button class="linkbtn" data-act="nav" data-r="admin">← Administração</button>
   <label class="field" style="max-width:420px;margin-top:6px"><span>Filtrar por hospital</span><select id="maqHosp"><option value="">Todos os hospitais</option>${S.hospitais.map(h=>`<option value="${esc(h.id)}" ${hf===h.id?'selected':''}>${esc(hname(h))} (${maqCount(t,h.id)})</option>`).join('')}</select></label>
   <div class="spread"><h2>Cadastro de máquinas</h2><button class="btn" data-act="maquina">+ Nova máquina de ${TIPOS[t].toLowerCase()}</button></div>
-  <div class="auth-tabs" style="max-width:420px"><button class="${t==='hemodialise'?'on':''}" data-act="maqTipo" data-t="hemodialise">Hemodiálise (${maqCount('hemodialise')})</button><button class="${t==='osmose'?'on':''}" data-act="maqTipo" data-t="osmose">Osmose (${maqCount('osmose')})</button></div>
+  <div class="auth-tabs" style="max-width:420px"><button class="${t==='hemodialise'?'on':''}" data-act="maqTipo" data-t="hemodialise">Hemodiálise (${maqCount('hemodialise',hf||undefined)})</button><button class="${t==='osmose'?'on':''}" data-act="maqTipo" data-t="osmose">Osmose (${maqCount('osmose',hf||undefined)})</button></div>
+  <div class="m" style="margin:-4px 0 6px">${hf?`Filtro: <b>${esc(hname(hosp(hf)))}</b> — mostrando ${list.length} de ${maqCount(t)} máquina(s) de ${TIPOS[t].toLowerCase()}. <button class="linkbtn" data-act="maqLimpar" style="padding:0">Limpar filtro</button>`
+    :`Total cadastrado: <b>${maqCount('hemodialise')}</b> de hemodiálise e <b>${maqCount('osmose')}</b> de osmose, em todos os hospitais.`}</div>
 
   ${list.length?ordem.map(hid=>`<h3>${esc(hid?hname(hosp(hid)):'Sem hospital definido')} (${grupos[hid].length})</h3><div class="cards">${grupos[hid].map(card).join('')}</div>`).join('')
     :`<div class="empty">Nenhuma máquina de ${TIPOS[t].toLowerCase()} cadastrada${hf?' neste hospital':''}.</div>`}`;
@@ -796,6 +798,7 @@ const ACT={
   todosMeses:()=>document.querySelectorAll('.months input').forEach(i=>i.checked=true),
   convite:d=>conviteModal(d.id),
   maqTipo:d=>{S.maqTipo=d.t;render()},
+  maqLimpar:()=>{S.maqHosp='';render()},
   maquina:d=>maquinaModal(d.id),
   delMaquina:async(d,btn)=>{if(!S.m.confirm){S.m.confirm=true;btn.textContent='Confirmar exclusão';return}
     btn.disabled=true;if(await w(()=>deleteDoc(D('maquinas',S.m.id)))){closeModal();toast('Máquina excluída.')}else btn.disabled=false},
