@@ -2,6 +2,12 @@
 
 A versão atual aparece no rodapé da tela **Equipe** e na tela de login.
 
+## v1.8 — 19/11/2026
+- **Cadastro de hospital simplificado:** só Nome, Sigla, Enfermeira que cobra a coleta, Contato no hospital e Observações (saíram "Nº de máquinas" e "Pontos de coleta"; as máquinas vêm do Cadastro de máquinas).
+- **Cadastro de máquinas:** o filtro "Filtrar por hospital" agora fica no topo, acima do título e das abas.
+- **Excluir cronograma** (administrador): botão "Excluir cronograma de AAAA" no fim da tela Cronograma, com confirmação. Apaga o cronograma do ano e as coletas geradas por ele.
+- Regras do Firebase **não mudaram**: basta enviar o `index.html`.
+
 ## v1.7 — 19/11/2026
 - **Cronograma no formato do documento da Humaniza:** tabela com Periodicidade, Tipo de coleta, Exames e os 12 meses (Jan/27 … Dez/27), mostrando a quantidade de pontos e, quando for o caso, os hospitais entre parênteses — ex.: "5 (HJV e HC)", "5 (demais hospitais)". Abaixo, o quantitativo de equipamentos e as OBS, como no documento.
 - Botão **"Criar a partir do modelo Humaniza"** (administrador): monta o cronograma com as 3 linhas do documento 2027 (microbiológica mensal nas osmoses, físico-químico semestral nas osmoses e microbiológica anual do dialisato). Também é possível copiar do ano anterior ou criar em branco.
